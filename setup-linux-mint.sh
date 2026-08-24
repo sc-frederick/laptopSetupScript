@@ -107,6 +107,8 @@ install_apt_packages() {
   local fuse_package="libfuse2"
   local package
   local -a packages=(
+    autoconf
+    automake
     build-essential
     ca-certificates
     curl
@@ -117,7 +119,9 @@ install_apt_packages() {
     gnupg
     jq
     libglib2.0-bin
+    libncurses-dev
     libssl-dev
+    m4
     pkg-config
     python3-gpg
     unzip
@@ -182,6 +186,7 @@ ensure_flatpak() {
 
 install_mise() {
   local mise_bin="$HOME/.local/bin/mise"
+  local mise_config="$HOME/.config/mise/config.toml"
   local bashrc="$HOME/.bashrc"
   local temp_bashrc
   local command
@@ -222,7 +227,7 @@ install_mise() {
     '# laptop-setup: mise end' >>"$bashrc"
 
   log "Installing developer runtimes and CLIs with mise"
-  "$mise_bin" use --global \
+  if ! ImageOS=ubuntu24 MISE_ERLANG_COMPILE=false "$mise_bin" use --global \
     erlang@latest \
     rebar@latest \
     go@latest \
@@ -231,19 +236,41 @@ install_mise() {
     node@lts \
     npm:typescript@latest \
     opencode@latest \
-    'npm:@opencode-ai/cli@beta[allow_builds=@opencode-ai/cli]' \
     codex@latest \
     starship@latest \
     lazygit@latest \
     fzf@latest \
     ripgrep@latest \
     fd@latest \
-    tree-sitter@latest
+    tree-sitter@latest; then
+    warn "One or more mise tools failed to install; checking command resolution"
+  fi
 
-  "$mise_bin" reshim
+  # Scoped npm packages with options are ambiguous in mise's inline syntax.
+  mkdir -p "$(dirname "$mise_config")"
+  touch "$mise_config"
+  if "$mise_bin" config set --file "$mise_config" --type string \
+    'tools.npm:@opencode-ai/cli.version' beta \
+    && "$mise_bin" config set --file "$mise_config" --type list \
+      'tools.npm:@opencode-ai/cli.allow_builds' '@opencode-ai/cli'; then
+    if ! "$mise_bin" install 'npm:@opencode-ai/cli'; then
+      warn "OpenCode 2 beta failed to install"
+      INSTALL_FAILURES+=("opencode2")
+    fi
+  else
+    warn "OpenCode 2 beta could not be added to the global mise config"
+    INSTALL_FAILURES+=("opencode2")
+  fi
+
+  if ! "$mise_bin" reshim; then
+    warn "mise could not regenerate its command shims"
+    INSTALL_FAILURES+=("mise-shims")
+  fi
   for command in "${mise_commands[@]}"; do
-    "$mise_bin" which "$command" >/dev/null \
-      || die "mise installed the toolset but could not resolve: $command"
+    if ! "$mise_bin" which "$command" >/dev/null; then
+      warn "mise could not resolve: $command"
+      INSTALL_FAILURES+=("mise:$command")
+    fi
   done
 }
 
@@ -555,7 +582,11 @@ fi
 install_nerd_fonts
 configure_default_font
 install_mise
-configure_starship
+if "$HOME/.local/bin/mise" which starship >/dev/null 2>&1; then
+  configure_starship
+else
+  warn "Skipping Starship configuration because Starship is unavailable"
+fi
 if command -v nvim >/dev/null 2>&1; then
   install_lazyvim
 else
