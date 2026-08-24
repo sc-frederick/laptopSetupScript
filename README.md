@@ -1,82 +1,123 @@
-# Bluefin MEP laptop setup
+# Linux Mint Cinnamon laptop setup
 
-This repository prepares a [Bluefin](https://projectbluefin.io/) laptop for
-BricsCAD, Dropbox, and LibreOffice without changing Bluefin's image-managed
-base operating system.
+This repository prepares an x86-64 Linux Mint Cinnamon laptop for development,
+CAD, communication, and day-to-day desktop use. The script is safe to rerun:
+APT and Flatpak leave current packages installed, `mise` reconciles its global
+tool configuration, and Beeper is downloaded only when its release URL changes.
 
-## Why the software is split up
+## What it installs
 
-Bluefin is a Fedora-based atomic desktop. Its `/usr` tree comes from a signed,
-bootable image and updates as a unit. That is why this setup does not use
-`dnf`, `rpm-ostree install`, or Ubuntu packages on the host.
+### Developer tools
 
-Bluefin's Homebrew installation is intended for host command-line tools. None
-of these three desktop applications needs a Homebrew package, so this script
-does not modify Homebrew.
+[`mise`](https://mise.jdx.dev/) manages the user-level development tools:
 
-- BricsCAD runs in an Ubuntu 24.04 Distrobox, where its vendor `.deb` is
-  supported and isolated from host package updates.
-- LibreOffice runs as the Flathub Flatpak on the host. The script leaves an
-  existing installation alone.
-- Dropbox runs as the Flathub Flatpak on the host so login startup, tray
-  integration, and file syncing are not tied to a container lifecycle.
+- Gleam with Erlang/Rebar3, Go, Rust, and the current Node.js LTS release
+- TypeScript (`tsc`)
+- OpenCode 1 (`opencode`)
+- The OpenCode 2 beta (`opencode2`), installed alongside OpenCode 1
+- OpenAI Codex CLI (`codex`)
+- Neovim from ButterRepo
 
-Distrobox shares your home directory, X11/Wayland sockets, audio, and devices
-with the host. It is integration tooling, not a security sandbox. BricsCAD
-will therefore see the same home files as host applications.
+The script adds `mise activate bash` to `~/.bashrc`. Project-specific
+`mise.toml` files can override these global versions later.
+
+### Desktop software
+
+- Helium browser and Neovim from ButterRepo
+- Ghostty from the `mkasberg/ghostty-ubuntu` PPA built for Ubuntu 24.04/26.04
+- Cloudflare WARP from Cloudflare's official APT repository
+- Dropbox's native package and daemon-control CLI from Dropbox's APT repository
+- LibreOffice and Bitwarden from Flathub
+- Beeper's official x86-64 AppImage, installed below `~/.local/opt`
+- BricsCAD from a separately downloaded vendor `.deb`
+- A Cinnamon launcher that opens Zoom's web client in Helium app mode
 
 ## Run it
 
-Run the initial setup from a terminal in your graphical Bluefin session:
+Download the current 64-bit Ubuntu BricsCAD `.deb` from
+[Bricsys](https://www.bricsys.com/bricscad-download) into `~/Downloads`, then
+run:
 
 ```bash
-chmod +x setup-bluefin-mep.sh
-./setup-bluefin-mep.sh
+chmod +x setup-linux-mint.sh
+./setup-linux-mint.sh
 ```
 
-Bricsys requires an account login and does not publish a stable unattended
-download URL. Download the current 64-bit Ubuntu `.deb` from the URL printed
-by the script, then install it with:
+The script finds the newest file matching `*BricsCAD*.deb` in the configured
+XDG downloads directory. To select a package explicitly:
 
 ```bash
-./setup-bluefin-mep.sh --bricscad-deb /path/to/downloaded/BricsCAD.deb
+./setup-linux-mint.sh --bricscad-deb /path/to/BricsCAD.deb
 ```
 
-The script installs the `.deb` with `apt`, exports BricsCAD into Bluefin's app
-launcher, and checks X11 and OpenGL from inside the container. It is safe to
-rerun for interrupted installs or a newer BricsCAD package.
+Other options are available through `./setup-linux-mint.sh --help`. Run the
+script as your normal desktop user; it requests `sudo` only for system package
+and repository changes.
 
-Launch Dropbox from the application menu after installation, sign in, choose
-the folders to sync, and enable **Start Dropbox on system startup** in its
-preferences. This account-linking step cannot be automated by the script.
+Open a new terminal after setup so the `mise` activation takes effect. The
+following commands should then be available:
 
-The script detects a proprietary NVIDIA driver through `nvidia-smi` when it
-first creates the box. Use `--nvidia` to force this or `--no-nvidia` to disable
-it. These flags cannot change an already-created container; remove and recreate
-the box manually if its GPU integration was initially configured incorrectly.
+```bash
+gleam --version
+go version
+rustc --version
+tsc --version
+nvim --version
+ghostty --version
+opencode --version
+opencode2 --version
+codex --version
+```
 
-## Important caveats
+## Manual sign-in
 
-- The Dropbox Flatpak is community-maintained and not officially supported by
-  Dropbox, although it packages Dropbox's official daemon. Its app ID is
-  `com.dropbox.Client`.
-- BricsCAD V26 supports Ubuntu 22.04 and newer supported Ubuntu releases, but
-  24.04 LTS is used here as the conservative target.
-- Distrobox passes the host's Xwayland display through automatically. Some
-  BricsCAD, GPU, and Wayland combinations can still have 3D stability issues.
-  The script validates connectivity but cannot guarantee vendor support for a
-  particular GPU or host display session.
-- Bricsys states that Linux 3D hardware acceleration is unsupported on Intel
-  GPUs and dual-graphics laptops. Check this before choosing laptop hardware.
+The script installs software but does not automate account or VPN enrollment:
+
+- Run `dropbox start -i` to download the signed Dropbox daemon, follow the
+  printed account-link URL, then use commands such as `dropbox status`,
+  `dropbox filestatus`, and `dropbox exclude`. Launch Bitwarden and sign in.
+- Launch Cloudflare WARP and complete its first-run registration. For CLI-only
+  setup, use `warp-cli registration new` followed by `warp-cli connect`.
+- Launch Beeper and connect the desired messaging accounts.
+- Launch BricsCAD and complete its vendor licensing flow.
+- Use **Zoom Web** from the Cinnamon menu. It deliberately avoids Zoom's Linux
+  desktop package; install that package separately if browser meetings prove
+  insufficient.
+
+## Caveats
+
+- Cloudflare officially lists supported Ubuntu releases rather than Linux Mint.
+  Mint releases based on a supported Ubuntu LTS generally use the same package,
+  but this is not an explicit Cloudflare support guarantee.
+- ButterRepo is an unofficial community repository whose packages are built and
+  tested on Debian 13. Helium and Neovim target the same glibc 2.38/t64
+  generation as Linux Mint 22, but Mint is not an upstream-tested target.
+- Ghostty's PPA is also community-maintained, but publishes separate packages
+  for the Ubuntu base used by Mint. An APT preference excludes only ButterRepo's
+  Debian-targeted Ghostty package so it cannot outrank the compatible PPA build.
+- Bitwarden's Flathub package is community-maintained. Flatpak is used here for
+  straightforward desktop updates and isolation.
+- The native `dropbox` CLI controls the local sync daemon and synced filesystem.
+  An extension that needs complete server-side traversal or operations outside
+  the local sync model should use Dropbox's HTTP API/SDK with OAuth as well.
+- OpenCode 2 is beta software. Its npm package requires a reviewed post-install
+  script to select the native `opencode2` binary; the `mise` declaration
+  explicitly permits that package's install script only.
+- Beeper requires glibc 2.32 or newer. Current Linux Mint releases satisfy this
+  requirement.
+- The Zoom web client may omit features available in Zoom's native client.
 
 ## Sources
 
-- [Bluefin introduction](https://docs.projectbluefin.io/introduction)
-- [Bluefin package and container guidance](https://docs.projectbluefin.io/FAQ/)
-- [Distrobox](https://distrobox.it/)
-- [Distrobox application export](https://distrobox.it/usage/distrobox-export/)
-- [BricsCAD system requirements](https://help.bricsys.com/en-us/document/bricscad/installation-and-licensing/bricscad-system-requirements?version=V26)
-- [BricsCAD download instructions](https://help.bricsys.com/en-us/document/bricscad/installation-and-licensing/installing-bricscad/downloading-bricscad?version=V26)
-- [LibreOffice Flatpak](https://www.libreoffice.org/download/flatpak/)
-- [Dropbox Linux requirements](https://help.dropbox.com/installs/system-requirements)
-- [Dropbox on Flathub](https://flathub.org/apps/com.dropbox.Client)
+- [mise installation](https://mise.jdx.dev/installing-mise.html)
+- [mise npm backend](https://mise.jdx.dev/dev-tools/backends/npm.html)
+- [OpenCode 1 installation](https://opencode.ai/docs/)
+- [OpenCode 2 installation](https://opencode.ai/v2/docs/)
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
+- [ButterRepo](https://codeberg.org/justaguylinux/butterrepo)
+- [Ghostty Ubuntu PPA](https://launchpad.net/~mkasberg/+archive/ubuntu/ghostty-ubuntu)
+- [Cloudflare WARP for Linux](https://developers.cloudflare.com/warp-client/get-started/linux/)
+- [Beeper downloads](https://www.beeper.com/download)
+- [BricsCAD downloads](https://help.bricsys.com/en-us/document/bricscad/installation-and-licensing/installing-bricscad/downloading-bricscad?version=V26)
+- [Dropbox Linux CLI](https://help.dropbox.com/installs/linux-commands)
+- [Bitwarden on Flathub](https://flathub.org/apps/com.bitwarden.desktop)
