@@ -556,7 +556,12 @@ install_nerd_fonts
 configure_default_font
 install_mise
 configure_starship
-install_lazyvim
+if command -v nvim >/dev/null 2>&1; then
+  install_lazyvim
+else
+  warn "Skipping LazyVim because Neovim is unavailable"
+  INSTALL_FAILURES+=("lazyvim")
+fi
 install_zoom_web_launcher
 
 if ((INSTALL_BEEPER)); then
