@@ -11,6 +11,8 @@ INSTALL_FAILURES=()
 readonly BRICSCAD_DOWNLOAD_URL="https://www.bricsys.com/bricscad-download"
 readonly BEEPER_DOWNLOAD_URL="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
 readonly BITWARDEN_APP_ID="com.bitwarden.desktop"
+readonly NERD_FONTS_RELEASE_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest"
+readonly LAZYVIM_STARTER_URL="https://github.com/LazyVim/starter.git"
 
 usage() {
   cat <<'EOF'
@@ -110,14 +112,18 @@ install_apt_packages() {
     curl
     dropbox
     flatpak
+    fontconfig
     git
     gnupg
     jq
+    libglib2.0-bin
     libssl-dev
     pkg-config
     python3-gpg
+    unzip
     cloudflare-warp
     xdg-utils
+    xz-utils
   )
   local -a butterrepo_packages=(helium-browser neovim)
 
@@ -179,7 +185,10 @@ install_mise() {
   local bashrc="$HOME/.bashrc"
   local temp_bashrc
   local command
-  local -a mise_commands=(erl rebar3 go rustc gleam node tsc opencode opencode2 codex)
+  local -a mise_commands=(
+    erl rebar3 go rustc gleam node tsc opencode opencode2 codex
+    starship lazygit fzf rg fd tree-sitter
+  )
 
   if [[ ! -x "$mise_bin" ]]; then
     log "Installing mise"
@@ -223,13 +232,160 @@ install_mise() {
     npm:typescript@latest \
     opencode@latest \
     'npm:@opencode-ai/cli@beta[allow_builds=@opencode-ai/cli]' \
-    codex@latest
+    codex@latest \
+    starship@latest \
+    lazygit@latest \
+    fzf@latest \
+    ripgrep@latest \
+    fd@latest \
+    tree-sitter@latest
 
   "$mise_bin" reshim
   for command in "${mise_commands[@]}"; do
     "$mise_bin" which "$command" >/dev/null \
       || die "mise installed the toolset but could not resolve: $command"
   done
+}
+
+install_nerd_fonts() {
+  local font_root="$HOME/.local/share/fonts/NerdFonts"
+  local latest_url
+  local version
+  local temp_dir
+  local font
+  local target_dir
+  local -a fonts=(JetBrainsMono CascadiaCode)
+
+  log "Installing JetBrains Mono and Cascadia Code Nerd Fonts"
+  latest_url=$(curl -fsSIL -o /dev/null -w '%{url_effective}' \
+    "$NERD_FONTS_RELEASE_URL") \
+    || die "Could not resolve the latest Nerd Fonts release"
+  version=${latest_url##*/}
+  [[ $version == v* ]] || die "Unexpected Nerd Fonts release URL: $latest_url"
+
+  mkdir -p "$font_root"
+  temp_dir=$(mktemp -d)
+  for font in "${fonts[@]}"; do
+    target_dir="$font_root/$font"
+    if [[ -f "$target_dir/.version" ]] \
+      && [[ $(<"$target_dir/.version") == "$version" ]]; then
+      continue
+    fi
+
+    mkdir -p "$temp_dir/$font"
+    curl -fL --retry 3 \
+      "https://github.com/ryanoasis/nerd-fonts/releases/download/$version/$font.tar.xz" \
+      | tar -xJ -C "$temp_dir/$font"
+    printf '%s\n' "$version" >"$temp_dir/$font/.version"
+    rm -rf "$target_dir"
+    mv "$temp_dir/$font" "$target_dir"
+  done
+  rm -rf "$temp_dir"
+
+  fc-cache -f "$font_root" >/dev/null
+  fc-match -f '%{family}\n' 'JetBrainsMono Nerd Font Mono' \
+    | grep -Fq 'JetBrainsMono Nerd Font Mono' \
+    || die "JetBrains Mono Nerd Font was installed but fontconfig cannot find it"
+}
+
+configure_default_font() {
+  local ghostty_config="$HOME/.config/ghostty/config"
+  local temp_config
+
+  log "Setting JetBrains Mono Nerd Font as the default monospace font"
+  gsettings set org.gnome.desktop.interface monospace-font-name \
+    'JetBrainsMono Nerd Font Mono 11'
+
+  mkdir -p "$(dirname "$ghostty_config")"
+  touch "$ghostty_config"
+  temp_config=$(mktemp)
+  awk '
+    $0 == "# laptop-setup: font begin" { managed = 1; next }
+    managed && $0 == "# laptop-setup: font end" { managed = 0; next }
+    !managed { print }
+  ' "$ghostty_config" >"$temp_config"
+  cat "$temp_config" >"$ghostty_config"
+  rm -f "$temp_config"
+  printf '%s\n%s\n%s\n%s\n' \
+    '# laptop-setup: font begin' \
+    'font-family = ""' \
+    'font-family = "JetBrainsMono Nerd Font Mono"' \
+    '# laptop-setup: font end' >>"$ghostty_config"
+}
+
+configure_starship() {
+  local mise_bin="$HOME/.local/bin/mise"
+  local starship_bin
+  local starship_config="$HOME/.config/starship.toml"
+  local bashrc="$HOME/.bashrc"
+  local temp_bashrc
+
+  log "Configuring Starship with Nerd Font symbols"
+  starship_bin=$("$mise_bin" which starship)
+  mkdir -p "$HOME/.config"
+  if [[ ! -e "$starship_config" ]]; then
+    "$starship_bin" preset nerd-font-symbols -o "$starship_config"
+  fi
+
+  temp_bashrc=$(mktemp)
+  awk '
+    $0 == "# laptop-setup: starship begin" { managed = 1; next }
+    managed && $0 == "# laptop-setup: starship end" { managed = 0; next }
+    !managed { print }
+  ' "$bashrc" >"$temp_bashrc"
+  cat "$temp_bashrc" >"$bashrc"
+  rm -f "$temp_bashrc"
+  # shellcheck disable=SC2016
+  printf '%s\n%s\n%s\n' \
+    '# laptop-setup: starship begin' \
+    'eval "$(starship init bash)"' \
+    '# laptop-setup: starship end' >>"$bashrc"
+}
+
+install_lazyvim() {
+  local config_dir="$HOME/.config/nvim"
+  local lazy_config="$config_dir/lua/config/lazy.lua"
+  local marker="$config_dir/.laptop-setup-lazyvim"
+  local timestamp
+  local path
+  local temp_dir
+  local nvim_version
+  local -a nvim_paths=(
+    "$HOME/.config/nvim"
+    "$HOME/.local/share/nvim"
+    "$HOME/.local/state/nvim"
+    "$HOME/.cache/nvim"
+  )
+
+  if [[ -f "$marker" ]]; then
+    log "LazyVim is already configured"
+    return
+  fi
+  if [[ -f "$lazy_config" ]] && grep -Fq 'LazyVim/LazyVim' "$lazy_config"; then
+    touch "$marker"
+    log "LazyVim is already configured"
+    return
+  fi
+
+  nvim_version=$(nvim --version | awk 'NR == 1 { sub(/^NVIM v/, ""); print; exit }')
+  dpkg --compare-versions "$nvim_version" ge 0.11.2 \
+    || die "LazyVim requires Neovim 0.11.2 or newer; found $nvim_version"
+
+  log "Installing the LazyVim starter configuration"
+  timestamp=$(date +%Y%m%d%H%M%S)
+  for path in "${nvim_paths[@]}"; do
+    if [[ -e "$path" ]]; then
+      mv "$path" "$path.bak.$timestamp"
+      log "Backed up $path to $path.bak.$timestamp"
+    fi
+  done
+
+  mkdir -p "$HOME/.config"
+  temp_dir=$(mktemp -d "$HOME/.config/.lazyvim.XXXXXX")
+  git clone --filter=blob:none "$LAZYVIM_STARTER_URL" "$temp_dir"
+  rm -rf "$temp_dir/.git"
+  touch "$temp_dir/.laptop-setup-lazyvim"
+  mv "$temp_dir" "$config_dir"
 }
 
 find_bricscad_deb() {
@@ -391,7 +547,11 @@ if ((INSTALL_FLATPAKS)); then
   ensure_flatpak "$BITWARDEN_APP_ID" "Bitwarden"
 fi
 
+install_nerd_fonts
+configure_default_font
 install_mise
+configure_starship
+install_lazyvim
 install_zoom_web_launcher
 
 if ((INSTALL_BEEPER)); then
@@ -418,7 +578,8 @@ fi
 
 log "Setup complete"
 printf '%s\n' \
-  'Open a new terminal before using gleam, go, rustc, tsc, opencode, opencode2, or codex.' \
+  'Open a new terminal to load Starship and the mise-managed developer tools.' \
+  'Open Neovim and run :LazyHealth after LazyVim finishes installing its plugins.' \
   'Run dropbox start -i, follow the account link, and launch Bitwarden to sign in.' \
   'Launch Cloudflare WARP from Cinnamon and complete its first-run registration.' \
   'Launch Zoom Web and Beeper from the Cinnamon application menu.'

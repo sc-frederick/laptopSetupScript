@@ -16,12 +16,30 @@ tool configuration, and Beeper is downloaded only when its release URL changes.
 - OpenCode 1 (`opencode`)
 - The OpenCode 2 beta (`opencode2`), installed alongside OpenCode 1
 - OpenAI Codex CLI (`codex`)
-- Neovim from ButterRepo
+- Neovim from ButterRepo with the official LazyVim starter configuration
+- LazyVim helpers: tree-sitter CLI, lazygit, fzf, ripgrep, and fd
+- Starship with its official Nerd Font Symbols preset
 
 The script adds mise's shim directory and `mise activate bash` to `~/.bashrc`.
 The shims keep globally installed commands available even when prompt-driven
 activation has not refreshed `PATH`. Project-specific `mise.toml` files can
 override these global versions later.
+
+The first LazyVim installation backs up an existing Neovim configuration and
+state to timestamped `.bak.YYYYMMDDHHMMSS` paths. Reruns detect LazyVim and
+leave subsequent editor customizations untouched. On first launch, Neovim
+downloads the configured plugins; run `:LazyHealth` afterward.
+
+### Fonts and prompt
+
+- JetBrains Mono Nerd Font and Cascadia Code Nerd Font from Nerd Fonts
+- JetBrains Mono Nerd Font Mono as Cinnamon's default monospace font
+- JetBrains Mono Nerd Font Mono as Ghostty's configured font
+- Starship's clean Nerd Font Symbols preset for Bash
+
+Font archives are installed under `~/.local/share/fonts/NerdFonts`. Existing
+Starship configuration is preserved; the preset is generated only when
+`~/.config/starship.toml` does not already exist.
 
 ### Desktop software
 
@@ -66,6 +84,9 @@ rustc --version
 tsc --version
 nvim --version
 ghostty --version
+starship --version
+lazygit --version
+tree-sitter --version
 opencode --version
 opencode2 --version
 codex --version
@@ -116,6 +137,9 @@ The script installs software but does not automate account or VPN enrollment:
 - [OpenCode 1 installation](https://opencode.ai/docs/)
 - [OpenCode 2 installation](https://opencode.ai/v2/docs/)
 - [OpenAI Codex CLI](https://developers.openai.com/codex/cli)
+- [LazyVim installation](https://www.lazyvim.org/installation)
+- [Nerd Fonts releases](https://github.com/ryanoasis/nerd-fonts/releases)
+- [Starship Nerd Font Symbols preset](https://starship.rs/presets/nerd-font)
 - [ButterRepo](https://codeberg.org/justaguylinux/butterrepo)
 - [Ghostty Ubuntu PPA](https://launchpad.net/~mkasberg/+archive/ubuntu/ghostty-ubuntu)
 - [Cloudflare WARP for Linux](https://developers.cloudflare.com/warp-client/get-started/linux/)
