@@ -375,7 +375,11 @@ install_lazyvim() {
   timestamp=$(date +%Y%m%d%H%M%S)
   mkdir -p "$HOME/.config"
   temp_dir=$(mktemp -d "$HOME/.config/.lazyvim.XXXXXX")
-  git clone --filter=blob:none "$LAZYVIM_STARTER_URL" "$temp_dir"
+  if ! git clone --filter=blob:none "$LAZYVIM_STARTER_URL" "$temp_dir"; then
+    rm -rf "$temp_dir"
+    printf 'Error: Could not clone the LazyVim starter\n' >&2
+    return 1
+  fi
   rm -rf "$temp_dir/.git"
   touch "$temp_dir/.laptop-setup-lazyvim"
 
