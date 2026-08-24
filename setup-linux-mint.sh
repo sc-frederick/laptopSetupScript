@@ -331,7 +331,7 @@ configure_starship() {
   awk '
     $0 == "# laptop-setup: starship begin" { managed = 1; next }
     managed && $0 == "# laptop-setup: starship end" { managed = 0; next }
-    !managed { print }
+    !managed && $0 != "eval \"$(starship init bash)\"" { print }
   ' "$bashrc" >"$temp_bashrc"
   cat "$temp_bashrc" >"$bashrc"
   rm -f "$temp_bashrc"
@@ -373,6 +373,12 @@ install_lazyvim() {
 
   log "Installing the LazyVim starter configuration"
   timestamp=$(date +%Y%m%d%H%M%S)
+  mkdir -p "$HOME/.config"
+  temp_dir=$(mktemp -d "$HOME/.config/.lazyvim.XXXXXX")
+  git clone --filter=blob:none "$LAZYVIM_STARTER_URL" "$temp_dir"
+  rm -rf "$temp_dir/.git"
+  touch "$temp_dir/.laptop-setup-lazyvim"
+
   for path in "${nvim_paths[@]}"; do
     if [[ -e "$path" ]]; then
       mv "$path" "$path.bak.$timestamp"
@@ -380,11 +386,6 @@ install_lazyvim() {
     fi
   done
 
-  mkdir -p "$HOME/.config"
-  temp_dir=$(mktemp -d "$HOME/.config/.lazyvim.XXXXXX")
-  git clone --filter=blob:none "$LAZYVIM_STARTER_URL" "$temp_dir"
-  rm -rf "$temp_dir/.git"
-  touch "$temp_dir/.laptop-setup-lazyvim"
   mv "$temp_dir" "$config_dir"
 }
 
