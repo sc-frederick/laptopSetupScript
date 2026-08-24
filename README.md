@@ -18,8 +18,10 @@ tool configuration, and Beeper is downloaded only when its release URL changes.
 - OpenAI Codex CLI (`codex`)
 - Neovim from ButterRepo
 
-The script adds `mise activate bash` to `~/.bashrc`. Project-specific
-`mise.toml` files can override these global versions later.
+The script adds mise's shim directory and `mise activate bash` to `~/.bashrc`.
+The shims keep globally installed commands available even when prompt-driven
+activation has not refreshed `PATH`. Project-specific `mise.toml` files can
+override these global versions later.
 
 ### Desktop software
 
@@ -27,7 +29,7 @@ The script adds `mise activate bash` to `~/.bashrc`. Project-specific
 - Ghostty from the `mkasberg/ghostty-ubuntu` PPA built for Ubuntu 24.04/26.04
 - Cloudflare WARP from Cloudflare's official APT repository
 - Dropbox's native package and daemon-control CLI from Dropbox's APT repository
-- LibreOffice and Bitwarden from Flathub
+- Bitwarden from Flathub; Linux Mint's preinstalled LibreOffice is retained
 - Beeper's official x86-64 AppImage, installed below `~/.local/opt`
 - BricsCAD from a separately downloaded vendor `.deb`
 - A Cinnamon launcher that opens Zoom's web client in Helium app mode

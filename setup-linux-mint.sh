@@ -10,7 +10,6 @@ INSTALL_FAILURES=()
 
 readonly BRICSCAD_DOWNLOAD_URL="https://www.bricsys.com/bricscad-download"
 readonly BEEPER_DOWNLOAD_URL="https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop"
-readonly LIBREOFFICE_APP_ID="org.libreoffice.LibreOffice"
 readonly BITWARDEN_APP_ID="com.bitwarden.desktop"
 
 usage() {
@@ -22,7 +21,7 @@ Prepare a Linux Mint Cinnamon laptop with development tools and desktop apps.
 Options:
   --bricscad-deb PATH  Install this BricsCAD .deb instead of searching Downloads
   --no-bricscad        Do not search for or install BricsCAD
-  --no-flatpaks        Do not install LibreOffice or Bitwarden
+  --no-flatpaks        Do not install Bitwarden
   --no-beeper          Do not download or install the Beeper AppImage
   -h, --help           Show this help
 
@@ -178,6 +177,9 @@ ensure_flatpak() {
 install_mise() {
   local mise_bin="$HOME/.local/bin/mise"
   local bashrc="$HOME/.bashrc"
+  local temp_bashrc
+  local command
+  local -a mise_commands=(erl rebar3 go rustc gleam node tsc opencode opencode2 codex)
 
   if [[ ! -x "$mise_bin" ]]; then
     log "Installing mise"
@@ -187,15 +189,28 @@ install_mise() {
     log "mise is already installed"
   fi
 
+  log "Enabling mise in Bash"
   touch "$bashrc"
-  if ! grep -Fq '# laptop-setup: mise' "$bashrc"; then
-    log "Enabling mise in Bash"
-    # This activation must run in future shells, not during setup.
-    # shellcheck disable=SC2016
-    printf '\n%s\n%s\n' \
-      '# laptop-setup: mise' \
-      'eval "$(~/.local/bin/mise activate bash)"' >>"$bashrc"
-  fi
+  temp_bashrc=$(mktemp)
+  awk '
+    $0 == "# laptop-setup: mise begin" { managed = 1; next }
+    managed && $0 == "# laptop-setup: mise end" { managed = 0; next }
+    managed { next }
+    $0 == "# laptop-setup: mise" { legacy = 1; next }
+    legacy && $0 == "eval \"$(~/.local/bin/mise activate bash)\"" { legacy = 0; next }
+    legacy { legacy = 0 }
+    { print }
+  ' "$bashrc" >"$temp_bashrc"
+  cat "$temp_bashrc" >"$bashrc"
+  rm -f "$temp_bashrc"
+
+  # Keep shims available even if prompt-driven activation does not update PATH.
+  # shellcheck disable=SC2016
+  printf '%s\n%s\n%s\n%s\n' \
+    '# laptop-setup: mise begin' \
+    'export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"' \
+    'eval "$(~/.local/bin/mise activate bash)"' \
+    '# laptop-setup: mise end' >>"$bashrc"
 
   log "Installing developer runtimes and CLIs with mise"
   "$mise_bin" use --global \
@@ -209,6 +224,12 @@ install_mise() {
     opencode@latest \
     'npm:@opencode-ai/cli@beta[allow_builds=@opencode-ai/cli]' \
     codex@latest
+
+  "$mise_bin" reshim
+  for command in "${mise_commands[@]}"; do
+    "$mise_bin" which "$command" >/dev/null \
+      || die "mise installed the toolset but could not resolve: $command"
+  done
 }
 
 find_bricscad_deb() {
@@ -367,7 +388,6 @@ install_apt_packages
 remove_dropbox_flatpak
 
 if ((INSTALL_FLATPAKS)); then
-  ensure_flatpak "$LIBREOFFICE_APP_ID" "LibreOffice"
   ensure_flatpak "$BITWARDEN_APP_ID" "Bitwarden"
 fi
 
